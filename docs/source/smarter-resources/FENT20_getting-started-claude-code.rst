@@ -1,9 +1,18 @@
 .. Getting Started: Claude Code with Smarter
    NAPL capstone tutorial for the custom programming area.
    Intended location in the docs tree: smarter-platform/
+   Created with the assistance of Claude (Anthropic), using our team's original
+   ideas to meet the requirements of the capstone project for the AI Integration
+   in Enterprise course.
 
 Getting Started: Claude Code with Smarter
 ==========================================
+
+.. note::
+
+   **Acknowledgment.** This page was created with the assistance of Claude
+   (Anthropic), using our team's original ideas to meet the requirements of the
+   capstone project for the AI Integration in Enterprise course.
 
 .. contents:: On this page
    :local:
@@ -429,6 +438,13 @@ For a quick test in the current shell:
    export ANTHROPIC_BASE_URL="<SMARTER_GATEWAY_URL>"
    export ANTHROPIC_AUTH_TOKEN="<your-smarter-api-key>"
 
+On Windows PowerShell, set the same variables like this:
+
+.. code-block:: console
+
+   $env:ANTHROPIC_BASE_URL = "<SMARTER_GATEWAY_URL>"
+   $env:ANTHROPIC_AUTH_TOKEN = "<your-smarter-api-key>"
+
 For a persistent setup that keeps secrets out of your shell profile, use Claude
 Code's user-level settings file:
 
@@ -445,6 +461,12 @@ Code's user-level settings file:
 .. code-block:: console
 
    chmod 600 ~/.claude/settings.json
+
+On Windows, ``chmod`` does not apply. Keep the file in your user profile
+folder and do not share it.
+
+Prefer not to hand-write this file? :ref:`Part D <napl-part-d>` generates it
+from the manifest you applied in Part A.
 
 To pin a model, add ``ANTHROPIC_MODEL`` set to the model ID the gateway exposes.
 Anthropic's `LLM gateway guide
@@ -529,6 +551,93 @@ request:
    pytest -q
    git add -A && git commit -m "Implement peak_load"
 
+.. _napl-part-d:
+
+Part D: Generate the settings from your manifest (optional)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Part B had you type the model and gateway into ``settings.json`` by hand. That
+duplicates information Smarter already holds: the ``Provider`` manifest from
+step 4 names the model. The ``claude_code_settings`` helper reads that manifest
+and writes the matching Claude Code settings, so the model is defined in one
+place. The full class and function reference is on the
+:doc:`Claude Code settings API </smarter-resources/claude-code-settings-api>`
+page.
+
+The helper takes the **model** from the manifest. It cannot take the gateway
+URL from there, because the manifest does not contain it, so you pass in the
+``<SMARTER_GATEWAY_URL>`` from Setup.
+
+**14. Install the helper's dependency**
+
+Place ``claude_code_settings.py`` and your ``anthropic-sonnet.yaml`` from
+step 4 in one folder, then install the YAML reader it uses:
+
+.. code-block:: console
+
+   pip install pyyaml
+
+**15. Generate the settings file**
+
+Create a small script, replacing the example URL with your real
+``<SMARTER_GATEWAY_URL>``:
+
+.. code-block:: python
+   :caption: make_settings.py
+
+   from claude_code_settings import (
+       ClaudeCodeSettings,
+       load_provider_manifest,
+       write_settings,
+   )
+
+   manifest = load_provider_manifest("anthropic-sonnet.yaml")
+   settings = ClaudeCodeSettings(
+       manifest,
+       gateway_url="https://smarter.napl.example/claude",
+   )
+   print(settings.env)
+   print("Wrote", write_settings(settings, "~/.claude/settings.json"))
+
+Run it:
+
+.. code-block:: console
+
+   python make_settings.py
+
+.. code-block:: text
+
+   {'ANTHROPIC_BASE_URL': 'https://smarter.napl.example/claude', 'ANTHROPIC_MODEL': 'claude-sonnet-5-5'}
+   Wrote /home/you/.claude/settings.json
+
+The helper validates the manifest before writing anything. It stops with a
+clear ``ValueError`` if the file is not a Smarter ``Provider``, if the provider
+is not ``anthropic``, or if the model is missing.
+
+.. note::
+
+   By default the helper does **not** write your API key into the file. Export
+   it in your shell instead, as shown in step 8. If you accept the risk of a
+   token on disk, pass ``include_token=True`` along with an ``api_key``.
+
+**16. Check the result**
+
+The generated file contains only the non-secret values:
+
+.. code-block:: json
+   :caption: ~/.claude/settings.json
+
+   {
+     "env": {
+       "ANTHROPIC_BASE_URL": "https://smarter.napl.example/claude",
+       "ANTHROPIC_MODEL": "claude-sonnet-5-5"
+     }
+   }
+
+Export ``ANTHROPIC_AUTH_TOKEN`` as in step 8, then repeat the smoke test from
+step 9. Because the model comes from the manifest, changing the model in Smarter
+and re-running ``make_settings.py`` keeps Claude Code in step with it.
+
 
 .. _napl-proof-of-concept:
 
@@ -585,6 +694,10 @@ or logs show requests attributed to your account from the time of your session.
 This is the evidence that model traffic was authenticated and audited by
 Smarter, not sent around it.
 
+**Optional.** If you completed Part D, ``~/.claude/settings.json`` contains the
+model named in your Smarter ``Provider`` manifest, and ``/model`` inside a
+Claude Code session shows the same model.
+
 
 Troubleshooting
 ---------------
@@ -636,6 +749,21 @@ Troubleshooting
      - Add the path to *Boundaries* in ``CLAUDE.md``, deny it in
        ``/permissions``, and reject the edit. Report persistent cases to the
        platform team.
+   * - ``ModuleNotFoundError: No module named 'yaml'``
+     - The helper's dependency is missing. Run ``pip install pyyaml`` in the
+       same environment you run the script from.
+   * - ``ValueError: gateway_url must be an http(s) URL``
+     - The placeholder ``<SMARTER_GATEWAY_URL>`` is still in the script.
+       Replace it with the real address from the internal wiki.
+   * - ``ValueError: plain http is only allowed for localhost``
+     - The gateway address starts with ``http://``. Use the ``https://``
+       address, or ask the platform team if only plain http is available.
+   * - ``ValueError: spec.provider.name must be 'anthropic'``
+     - The manifest describes a different provider. Point the script at the
+       Anthropic manifest from step 4.
+   * - ``ValueError: unsupported apiVersion`` or ``expected kind 'Provider'``
+     - The file is not a Smarter ``Provider`` manifest, or was written for a
+       different schema version. Compare it with ``smarter manifest provider``.
 
 For Smarter issues beyond this tutorial, see the platform
 :doc:`troubleshooting guide </smarter-platform/trouble-shooting>`. If you remain
@@ -647,6 +775,7 @@ paste an API key or token into a message.**
 
    - :doc:`/smarter-resources/smarter-provider`
    - :doc:`/smarter-resources/smarter-proxy`
+   - :doc:`/smarter-resources/FENT20_claude-code-settings-api`
    - `Claude Code documentation
      <https://docs.claude.com/en/docs/claude-code/overview>`_
    - `Claude Code LLM gateway guide
